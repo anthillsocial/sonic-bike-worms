@@ -6,37 +6,64 @@ import Adafruit_BBIO.ADC as ADC
 class Wormery:
 
     # Initialise the object
-    def __init__(self):
+    def __init__(self, interface, ssid):
+        # Setup vars
+        self.interface = interface
+        self.ssid = ssid
         # Setup the OSC object so we can send messages
         try:
-            target = liblo.Address(12345)
+            self.target = liblo.Address(12345)
         except liblo.AddressError as err:
             print(err)
             sys.exit()
-        load_test_sounds(self):
+        # Load some test sounds
+        self.load_test_sounds()
         # And setup the analog read
         ADC.setup()
         # Release the worms! Start some threads
         threading.Thread(target=self.worm_wifi).start()
-        threading.Thread(target=self.worm_analog).start()
+        #threading.Thread(target=self.worm_analog).start()
         
     # Just load some test sounds for us to play with
     def load_test_sounds(self):
-        # Load a sound and start looping it
-        liblo.send(target, "/load", 0, "Scr1.wav")
-        liblo.send(target, "/loop", 0, 1)
-        liblo.send(target, "/play", 0)
-
+        liblo.send(self.target, "/load", 0, "Scr1.wav")
+        liblo.send(self.target, "/loop", 0, 1)
+        liblo.send(self.target, "/play", 0)
+    
     # Thread to monitor wifi signals
     def worm_wifi(self):
-        command = 'sudo iwlist wlan1 scan | grep "Signal level" | awk \'{gsub("level=", "", $3);print $3}\''
-        # Keep checking on the wifi signals in the area
+        # Command to grab all listed signals in the area
+        scanwifi = 'sudo iwlist {} scan'.format(self.interface)
+        # Keep checking on the wifi signals in the area TODO: Should really make this a regex rather than calling twice...
         while True:
             # Grab all the signals
-            resp = subprocess.check_output(command, shell=True).decode("utf-8")
-            print(resp)
+            resp = subprocess.check_output(scanwifi, shell=True).decode("utf-8").split("\n")
+            keyword = 'Signal' 
+            i=ssidlevel=0
+            levels = []
+            for line in resp:
+                # Save all the signal levels
+                if keyword in line:
+                    level=self.grab_signal_level(line) #line.strip().split("Signal level=-")[1].replace(' dBm', '')
+                    levels.append(int(level))
+                # Save the level of a specific wifi ssid
+                if self.ssid in line:
+                    ssidlevel = self.grab_signal_level(resp[i-2])
+                i=i+1
+            averagelevel = sum(levels) / len(levels)
+            print('nSignals: {} AverageQuality:{}% {}Quality:{}%'.format(len(levels), averagelevel, self.ssid, ssidlevel))
+            self.worm_wifi_osc(averagelevel, ssidlevel)
             time.sleep(0.2)
     
+    # What OSC messageds should we send for the worm wifi?
+    def worm_wifi_osc(self, averagelevel, ssidlevel):
+        # Lets convert the levels from 0-100% to 0.0 to 1
+        averagelevel = averagelevel*0.01
+        ssidlevel = ssidlevel*0.01
+        # Send a message to alter pitch
+        liblo.send(self.target, "/pitch", 0, ssidlevel)
+        # Or what about altering
+
     # Thread to monitor analog inputs
     def worm_analog(self):
         # Now loop and send continuous messages
@@ -68,5 +95,16 @@ class Wormery:
                 print('a1:{} a2:{} a3:{} a4:{} a5:{} a6:{} '.format(a,b,c,d,e,f,g))
             #    startB = time.time()
             #     liblo.send(target, "/volume", 0, pitch)
+    
+    # UTILITIES ===========
+    def grab_signal_level(self, line):
+        try:
+            #level=line.strip().split("Quality=")[1].replace(' dBm', '')
+            nums = line.split('Quality=')[1].split('  Signal level')[0].split('/')
+            quality =  int(round(float(nums[0]) / float(nums[1]) * 100))
+        except:
+            quality = 0
+        return int(quality)
 
-            
+# Start the app
+Wormery('wlan1', 'Kiza')
