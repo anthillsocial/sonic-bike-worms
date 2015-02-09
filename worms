@@ -1,0 +1,72 @@
+#!/usr/bin/env python
+import liblo, sys, time, math, threading, subprocess 
+import Adafruit_BBIO.ADC as ADC
+
+# The application class
+class Wormery:
+
+    # Initialise the object
+    def __init__(self):
+        # Setup the OSC object so we can send messages
+        try:
+            target = liblo.Address(12345)
+        except liblo.AddressError as err:
+            print(err)
+            sys.exit()
+        load_test_sounds(self):
+        # And setup the analog read
+        ADC.setup()
+        # Release the worms! Start some threads
+        threading.Thread(target=self.worm_wifi).start()
+        threading.Thread(target=self.worm_analog).start()
+        
+    # Just load some test sounds for us to play with
+    def load_test_sounds(self):
+        # Load a sound and start looping it
+        liblo.send(target, "/load", 0, "Scr1.wav")
+        liblo.send(target, "/loop", 0, 1)
+        liblo.send(target, "/play", 0)
+
+    # Thread to monitor wifi signals
+    def worm_wifi(self):
+        command = 'sudo iwlist wlan1 scan | grep "Signal level" | awk \'{gsub("level=", "", $3);print $3}\''
+        # Keep checking on the wifi signals in the area
+        while True:
+            # Grab all the signals
+            resp = subprocess.check_output(command, shell=True).decode("utf-8")
+            print(resp)
+            time.sleep(0.2)
+    
+    # Thread to monitor analog inputs
+    def worm_analog(self):
+        # Now loop and send continuous messages
+        pitch = oldpitch = newpitch = 0.0
+        startA = startB = time.time()
+        time.clock()
+        elapsedA = elapsedB = counter = lastcount = rps = oldrps = 0
+        maxsmooth = 10
+        smooth = range(maxsmooth+1)
+        n = 0
+        incspeed = 0.3
+        while True:        
+            # pitch = (-1*math.sin(step)*(top-bottom))+(top-bottom) # Sine wave used for testing
+            # step += 0.2                                           #   |---Used for testing
+            elapsedA = time.time() - startA
+            elapsedB = time.time() - startB
+            # Read the analog input and count how many times
+            # it reached the threshold every n seconds
+            a = round(ADC.read("AIN0"),2) # returns a value between 0 and 1.0
+            b = round(ADC.read("AIN1"),2) # returns a value between 0 and 1.0
+            c = round(ADC.read("AIN2"),2) # returns a value between 0 and 1.0
+            d = round(ADC.read("AIN3"),2) # returns a value between 0 and 1.0
+            e = round(ADC.read("AIN4"),2) # returns a value between 0 and 1.0
+            f = round(ADC.read("AIN5"),2) # returns a value between 0 and 1.0
+            g = round(ADC.read("AIN6"),2) # returns a value between 0 and 1.0
+            # Now determin revolutions per n seconds
+            if elapsedA > 0.5:
+                startA = time.time()
+                print('a1:{} a2:{} a3:{} a4:{} a5:{} a6:{} '.format(a,b,c,d,e,f,g))
+            #    startB = time.time()
+            #     liblo.send(target, "/volume", 0, pitch)
+
+            
